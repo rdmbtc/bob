@@ -37,13 +37,8 @@ export const saveMyRegistration = createServerFn({ method: "POST" })
       throw new Error("That Twitter handle is already registered by someone else.");
     }
 
-    const { data: userReg } = await supabase
-      .from("registrations")
-      .select("wallet_address")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    let walletAddress = data.wallet_address || userReg?.wallet_address;
+    // We only generate a new wallet if they don't already have one in the database.
+    let walletAddress = userReg?.wallet_address;
 
     if (!walletAddress) {
       // Generate a new Developer-Controlled Wallet for this user
@@ -90,6 +85,56 @@ export const saveMyRegistration = createServerFn({ method: "POST" })
         },
         { onConflict: "user_id" },
       )
+      .select("id, twitter_handle, wallet_address, created_at, updated_at")
+      .single();
+
+    if (error) throw new Error(error.message);
+    return { registration: saved };
+  });
+
+// Force regenerate wallet
+export const regenerateMyWallet = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+
+    // Generate a new Developer-Controlled Wallet for this user
+    const { initiateDeveloperControlledWalletsClient } = await import("@circle-fin/developer-controlled-wallets");
+    const apiKey = process.env.CIRCLE_API_KEY;
+    const entitySecret = process.env.CIRCLE_ENTITY_SECRET;
+    const botWalletId = process.env.BOT_WALLET_ID;
+    
+    if (!apiKey || !entitySecret || !botWalletId) {
+      throw new Error("Server missing Circle environment variables for wallet generation.");
+    }
+
+    const client = initiateDeveloperControlledWalletsClient({ apiKey, entitySecret });
+    
+    const botWalletRes = await client.getWallet({ id: botWalletId });
+    const walletSetId = botWalletRes.data?.wallet?.walletSetId;
+
+    if (!walletSetId) {
+      throw new Error("Failed to retrieve walletSetId from bot wallet.");
+    }
+    
+    const newWalletRes = await client.createWallets({
+      idempotencyKey: crypto.randomUUID(),
+      blockchains: ["ARC-TESTNET"],
+      count: 1,
+      walletSetId,
+      accountType: "EOA",
+      metadata: [{ name: `user-${userId}-regen`, refId: userId }],
+    });
+
+    const newWalletAddress = newWalletRes.data?.wallets?.[0]?.address;
+    if (!newWalletAddress) {
+      throw new Error("Failed to generate wallet from Circle API.");
+    }
+
+    const { data: saved, error } = await supabase
+      .from("registrations")
+      .update({ wallet_address: newWalletAddress })
+      .eq("user_id", userId)
       .select("id, twitter_handle, wallet_address, created_at, updated_at")
       .single();
 

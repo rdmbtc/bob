@@ -28,8 +28,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import {
   getMyRegistration,
-  saveMyRegistration,
   getMyTransactions,
+  saveMyRegistration as saveRegistration,
+  regenerateMyWallet as regenerateWallet,
 } from "@/lib/registration.functions";
 import { registrationSchema } from "@/lib/registration.schema";
 import { BOT_HANDLE, explorerTxUrl, normalizeHandle, WALLET_REGEX } from "@/lib/config";
@@ -51,9 +52,8 @@ function Dashboard() {
   const queryClient = useQueryClient();
 
   const [handle, setHandle] = useState("");
-  const [wallet, setWallet] = useState("");
   const [connecting, setConnecting] = useState(false);
-  const [errors, setErrors] = useState<{ handle?: string; wallet?: string }>({});
+  const [errors, setErrors] = useState<{ handle?: string }>({});
 
   const fetchRegistration = useServerFn(getMyRegistration);
   const fetchTransactions = useServerFn(getMyTransactions);
@@ -68,7 +68,7 @@ function Dashboard() {
     queryFn: () => fetchTransactions(),
   });
 
-  const walletAddressToFetch = wallet && WALLET_REGEX.test(wallet) ? wallet : null;
+  const walletAddressToFetch = regQuery.data?.registration?.wallet_address;
 
   const balanceQuery = useQuery({
     queryKey: ["usdc-balance", walletAddressToFetch],
@@ -105,14 +105,7 @@ function Dashboard() {
     const reg = regQuery.data?.registration;
     if (reg) {
       setHandle(reg.twitter_handle);
-      setWallet(reg.wallet_address);
-      return;
     }
-    // No registration yet: prefill the wallet from the signed-in wallet, if any.
-    supabase.auth.getUser().then(({ data }) => {
-      const addr = data.user?.user_metadata?.wallet_address as string | undefined;
-      if (addr) setWallet((prev) => prev || addr);
-    });
   }, [regQuery.data]);
 
   useEffect(() => {
@@ -129,13 +122,12 @@ function Dashboard() {
         toast.error("No wallet detected. Install a browser wallet like MetaMask.");
         return;
       }
-      const address = await requestAccount(provider);
+      await requestAccount(provider);
       try {
         await ensureArcTestnet(provider);
       } catch (networkErr) {
         console.warn("Could not switch to Arc Testnet:", networkErr);
       }
-      setWallet(address.toLowerCase());
       toast.success("Wallet connected.");
     } catch (err) {
       console.error("Connect wallet error:", err);
@@ -156,17 +148,25 @@ function Dashboard() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const regenMutation = useMutation({
+    mutationFn: () => regenerateWallet(),
+    onSuccess: () => {
+      toast.success("New wallet generated successfully!");
+      queryClient.invalidateQueries({ queryKey: ["registration"] });
+      queryClient.invalidateQueries({ queryKey: ["usdc-balance"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = registrationSchema.safeParse({
       twitter_handle: handle,
-      wallet_address: wallet,
     });
     if (!parsed.success) {
-      const fieldErrors: { handle?: string; wallet?: string } = {};
+      const fieldErrors: { handle?: string } = {};
       for (const issue of parsed.error.issues) {
         if (issue.path[0] === "twitter_handle") fieldErrors.handle = issue.message;
-        if (issue.path[0] === "wallet_address") fieldErrors.wallet = issue.message;
       }
       setErrors(fieldErrors);
       return;
@@ -292,30 +292,29 @@ function Dashboard() {
                     <p className="text-sm text-destructive">{errors.handle}</p>
                   )}
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 pt-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="wallet">Arc wallet address</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 rounded-full text-xs"
-                      onClick={handleConnectWallet}
-                      disabled={connecting}
-                    >
-                      {connecting ? "Connecting…" : "Connect wallet"}
-                    </Button>
+                    <Label>Arc wallet address</Label>
+                    {regQuery.data?.registration && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 rounded-full text-xs text-muted-foreground"
+                        onClick={() => {
+                          if (confirm("Are you sure? This will replace your current wallet with a newly generated one.")) {
+                            regenMutation.mutate();
+                          }
+                        }}
+                        disabled={regenMutation.isPending}
+                      >
+                        {regenMutation.isPending ? "Generating..." : "Generate New Wallet"}
+                      </Button>
+                    )}
                   </div>
-                  <Input
-                    id="wallet"
-                    value={wallet}
-                    onChange={(e) => setWallet(e.target.value.trim())}
-                    placeholder="Leave blank to auto-generate a wallet"
-                    className="font-mono"
-                  />
-                  {errors.wallet && (
-                    <p className="text-sm text-destructive">{errors.wallet}</p>
-                  )}
+                  <div className="text-sm text-muted-foreground p-3 bg-muted rounded-md font-mono break-all">
+                    {regQuery.data?.registration?.wallet_address || "A Circle wallet will be automatically generated upon saving."}
+                  </div>
                 </div>
                 <Button
                   type="submit"
