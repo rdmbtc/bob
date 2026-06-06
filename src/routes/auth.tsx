@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Wallet } from "lucide-react";
 
@@ -15,10 +14,6 @@ import {
   ensureArcTestnet,
   personalSign,
 } from "@/lib/wallet";
-import {
-  requestWalletNonce,
-  verifyWalletSignature,
-} from "@/lib/wallet-auth.functions";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -34,9 +29,6 @@ function AuthPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState<"wallet" | "google" | null>(null);
 
-  const getNonce = useServerFn(requestWalletNonce);
-  const verifySignature = useServerFn(verifyWalletSignature);
-
   async function handleWallet() {
     setLoading("wallet");
     try {
@@ -51,24 +43,50 @@ function AuthPage() {
         await ensureArcTestnet(provider);
       } catch (networkErr) {
         console.warn("Could not switch to Arc Testnet, proceeding anyway:", networkErr);
-        toast.info("Proceeding with login (wallet not switched to Arc Testnet).");
       }
 
-      const { message } = await getNonce({ data: { address } });
+      // Generate a static, deterministic message for signing
+      const message = [
+        "Sign in to BobArcPay",
+        "",
+        "By signing this message you authenticate ownership of this wallet.",
+        "",
+        `Wallet: ${address.toLowerCase()}`,
+      ].join("\n");
+
       const signature = await personalSign(provider, address, message);
 
-      const { tokenHash } = await verifySignature({
-        data: { address, signature },
+      const email = `${address.toLowerCase()}@arcwallet.bobarcpay.app`;
+      const password = signature;
+
+      // Step 1: Try to sign in with password
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      const { error } = await supabase.auth.verifyOtp({
-        token_hash: tokenHash,
-        type: "email",
-      });
-      if (error) {
-        console.error("verifyOtp error:", error);
-        toast.error("Could not complete sign-in. Please try again.");
-        return;
+      if (signInError) {
+        // Step 2: If sign in fails because user doesn't exist, sign up
+        if (signInError.message.includes("Invalid login credentials") || signInError.message.includes("User not found")) {
+          const { error: signUpError } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                wallet_address: address.toLowerCase(),
+              },
+            },
+          });
+          if (signUpError) {
+            console.error("signUp error:", signUpError);
+            toast.error("Could not complete registration. Please try again.");
+            return;
+          }
+        } else {
+          console.error("signIn error:", signInError);
+          toast.error("Wallet sign-in failed. Please try again.");
+          return;
+        }
       }
 
       toast.success("Wallet connected — you're signed in!");
