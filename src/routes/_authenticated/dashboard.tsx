@@ -50,6 +50,11 @@ function Dashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const [handle, setHandle] = useState("");
+  const [wallet, setWallet] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [errors, setErrors] = useState<{ handle?: string; wallet?: string }>({});
+
   const fetchRegistration = useServerFn(getMyRegistration);
   const fetchTransactions = useServerFn(getMyTransactions);
   const saveRegistration = useServerFn(saveMyRegistration);
@@ -95,11 +100,6 @@ function Dashboard() {
     enabled: !!walletAddressToFetch,
     refetchInterval: 5000,
   });
-
-  const [handle, setHandle] = useState("");
-  const [wallet, setWallet] = useState("");
-  const [connecting, setConnecting] = useState(false);
-  const [errors, setErrors] = useState<{ handle?: string; wallet?: string }>({});
 
   useEffect(() => {
     const reg = regQuery.data?.registration;
