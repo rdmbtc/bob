@@ -62,7 +62,7 @@ function AuthPage() {
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const password = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
-      const email = `${address.toLowerCase()}@arcwallet.bobarcpay.app`;
+      const email = `${address.toLowerCase()}@v2.bobarcpay.app`;
 
       // Step 1: Try to sign in with password
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
