@@ -31,11 +31,11 @@ dist-ssr
 *.sln
 *.sw?
 vps.txt
-.lovable/
-bot/
-.agents/
-supabase/
-docs/
+/.lovable/
+/bot/
+/.agents/
+/supabase/
+/docs/
 # Environment secrets — NEVER commit these
 .env
 .env.*
