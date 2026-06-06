@@ -37,6 +37,14 @@ export const saveMyRegistration = createServerFn({ method: "POST" })
       throw new Error("That Twitter handle is already registered by someone else.");
     }
 
+    const { data: userReg, error: regError } = await supabase
+      .from("registrations")
+      .select("wallet_address")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (regError) throw new Error(regError.message);
+
     // We only generate a new wallet if they don't already have one in the database.
     let walletAddress = userReg?.wallet_address;
 

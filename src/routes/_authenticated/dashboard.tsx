@@ -29,8 +29,8 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   getMyRegistration,
   getMyTransactions,
-  saveMyRegistration as saveRegistration,
-  regenerateMyWallet as regenerateWallet,
+  saveMyRegistration,
+  regenerateMyWallet,
 } from "@/lib/registration.functions";
 import { registrationSchema } from "@/lib/registration.schema";
 import { BOT_HANDLE, explorerTxUrl, normalizeHandle, WALLET_REGEX } from "@/lib/config";
@@ -58,6 +58,7 @@ function Dashboard() {
   const fetchRegistration = useServerFn(getMyRegistration);
   const fetchTransactions = useServerFn(getMyTransactions);
   const saveRegistration = useServerFn(saveMyRegistration);
+  const regenerateWallet = useServerFn(regenerateMyWallet);
 
   const regQuery = useQuery({
     queryKey: ["registration"],
