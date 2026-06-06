@@ -91,10 +91,15 @@ function Dashboard() {
         return;
       }
       const address = await requestAccount(provider);
-      await ensureArcTestnet(provider);
+      try {
+        await ensureArcTestnet(provider);
+      } catch (networkErr) {
+        console.warn("Could not switch to Arc Testnet:", networkErr);
+      }
       setWallet(address.toLowerCase());
       toast.success("Wallet connected.");
-    } catch {
+    } catch (err) {
+      console.error("Connect wallet error:", err);
       toast.error("Could not connect wallet. Please try again.");
     } finally {
       setConnecting(false);

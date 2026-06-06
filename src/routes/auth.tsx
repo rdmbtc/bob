@@ -47,7 +47,12 @@ function AuthPage() {
       }
 
       const address = await requestAccount(provider);
-      await ensureArcTestnet(provider);
+      try {
+        await ensureArcTestnet(provider);
+      } catch (networkErr) {
+        console.warn("Could not switch to Arc Testnet, proceeding anyway:", networkErr);
+        toast.info("Proceeding with login (wallet not switched to Arc Testnet).");
+      }
 
       const { message } = await getNonce({ data: { address } });
       const signature = await personalSign(provider, address, message);
@@ -61,6 +66,7 @@ function AuthPage() {
         type: "email",
       });
       if (error) {
+        console.error("verifyOtp error:", error);
         toast.error("Could not complete sign-in. Please try again.");
         return;
       }
@@ -68,6 +74,7 @@ function AuthPage() {
       toast.success("Wallet connected — you're signed in!");
       navigate({ to: "/dashboard" });
     } catch (err) {
+      console.error("Wallet auth error:", err);
       const code = (err as { code?: number })?.code;
       if (code === 4001) {
         toast.error("Request rejected in your wallet.");

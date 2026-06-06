@@ -89,8 +89,13 @@ export async function personalSign(
   address: string,
   message: string,
 ): Promise<string> {
+  const hexMessage =
+    "0x" +
+    Array.from(new TextEncoder().encode(message))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
   return (await provider.request({
     method: "personal_sign",
-    params: [message, address],
+    params: [hexMessage, address],
   })) as string;
 }
