@@ -32,7 +32,7 @@ import {
   getMyTransactions,
 } from "@/lib/registration.functions";
 import { registrationSchema } from "@/lib/registration.schema";
-import { BOT_HANDLE, explorerTxUrl, normalizeHandle } from "@/lib/config";
+import { BOT_HANDLE, explorerTxUrl, normalizeHandle, WALLET_REGEX } from "@/lib/config";
 import {
   getDefaultProvider,
   requestAccount,
@@ -63,6 +63,39 @@ function Dashboard() {
     queryFn: () => fetchTransactions(),
   });
 
+  const walletAddressToFetch = wallet && WALLET_REGEX.test(wallet) ? wallet : null;
+
+  const balanceQuery = useQuery({
+    queryKey: ["usdc-balance", walletAddressToFetch],
+    queryFn: async () => {
+      if (!walletAddressToFetch) return "0.00";
+      try {
+        const { createPublicClient, http, parseAbi, formatUnits } = await import("viem");
+        
+        const client = createPublicClient({
+          transport: http("https://rpc.testnet.arc.network"),
+        });
+        
+        const balance = await client.readContract({
+          address: "0x3600000000000000000000000000000000000000",
+          abi: parseAbi(["function balanceOf(address owner) view returns (uint256)"]),
+          functionName: "balanceOf",
+          args: [walletAddressToFetch as `0x${string}`],
+        });
+        
+        return Number(formatUnits(balance, 6)).toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+      } catch (err) {
+        console.error("Failed to fetch balance:", err);
+        return "0.00";
+      }
+    },
+    enabled: !!walletAddressToFetch,
+    refetchInterval: 5000,
+  });
+
   const [handle, setHandle] = useState("");
   const [wallet, setWallet] = useState("");
   const [connecting, setConnecting] = useState(false);
@@ -81,6 +114,12 @@ function Dashboard() {
       if (addr) setWallet((prev) => prev || addr);
     });
   }, [regQuery.data]);
+
+  useEffect(() => {
+    if (txQuery.data?.transactions) {
+      queryClient.invalidateQueries({ queryKey: ["usdc-balance"] });
+    }
+  }, [txQuery.data?.transactions?.length, queryClient]);
 
   async function handleConnectWallet() {
     setConnecting(true);
@@ -159,6 +198,65 @@ function Dashboard() {
           <Button variant="ghost" className="rounded-full" onClick={handleSignOut}>
             <LogOut className="mr-1 h-4 w-4" /> Sign out
           </Button>
+        </div>
+
+        {/* Balance & Status Overview */}
+        <div className="mt-8 grid gap-6 sm:grid-cols-3">
+          <Card className="border-[3px] border-foreground shadow-bob-sm bg-card">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Arc USDC Balance
+              </CardDescription>
+              <CardTitle className="text-2xl font-black font-display">
+                {balanceQuery.isLoading ? (
+                  <span className="inline-block h-8 w-24 animate-pulse rounded bg-foreground/10" />
+                ) : (
+                  <span>{balanceQuery.data ?? "0.00"} USDC</span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4">
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Auto-syncing with Arc Testnet
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-[3px] border-foreground shadow-bob-sm bg-card">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Registered Profile
+              </CardDescription>
+              <CardTitle className="text-2xl font-black font-display truncate">
+                {handle ? `@${handle}` : "Not registered"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4">
+              <p className="text-xs text-muted-foreground">
+                {registered ? "Verified on Twitter" : "Setup registration below"}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-[3px] border-foreground shadow-bob-sm bg-card">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Transactions
+              </CardDescription>
+              <CardTitle className="text-2xl font-black font-display">
+                {transactions.length}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4">
+              <p className="text-xs text-muted-foreground">
+                Total transactions processed
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="mt-8 grid gap-6 md:grid-cols-5">
