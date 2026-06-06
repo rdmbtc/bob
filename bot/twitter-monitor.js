@@ -207,12 +207,17 @@ async function lookupUser(handle) {
   }
 }
 
-async function sendPayment(handle, amountUsdc, tweetId) {
+async function sendPayment(fromHandle, toHandle, amountUsdc, tweetId) {
   try {
     const resp = await fetch(`${API_URL}/api/public/bot/send`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${SECRET}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ to_handle: handle, amount_usdc: amountUsdc, tweet_id: tweetId }),
+      body: JSON.stringify({
+        from_handle: fromHandle,
+        to_handle: toHandle,
+        amount_usdc: amountUsdc,
+        tweet_id: tweetId,
+      }),
     });
     const data = await resp.json();
     if (!resp.ok && resp.status !== 409) throw new Error(data.error || `HTTP ${resp.status}`);
@@ -299,9 +304,24 @@ async function checkMentions() {
     }
 
     toHandle = toHandle.toLowerCase();
-    console.log(`\n📨 @${tweet.authorHandle} → @${toHandle}: ${payment.amount} USDC`);
+    const fromHandle = tweet.authorHandle.toLowerCase();
+    console.log(`\n📨 @${fromHandle} → @${toHandle}: ${payment.amount} USDC`);
 
-    // Lookup
+    // Lookup sender
+    const senderLookup = await lookupUser(fromHandle);
+    if (!senderLookup) {
+      saveProcessed(tweet.id);
+      continue;
+    }
+
+    if (!senderLookup.registered) {
+      console.log(`  ❌ Sender @${fromHandle} not registered`);
+      await postReply(tweet.id, `@${fromHandle} ❌ You aren't registered on BobArcPay yet. Please register at bobarcpay.vercel.app first to start sending USDC!`);
+      saveProcessed(tweet.id);
+      continue;
+    }
+
+    // Lookup recipient
     const lookup = await lookupUser(toHandle);
     if (!lookup) {
       saveProcessed(tweet.id);
@@ -309,16 +329,16 @@ async function checkMentions() {
     }
 
     if (!lookup.registered) {
-      console.log(`  ❌ @${toHandle} not registered`);
-      await postReply(tweet.id, `@${tweet.authorHandle} ❌ @${toHandle} isn't registered on BobArcPay yet. They need to register at bobarcpay.vercel.app first!`);
+      console.log(`  ❌ Recipient @${toHandle} not registered`);
+      await postReply(tweet.id, `@${fromHandle} ❌ @${toHandle} isn't registered on BobArcPay yet. They need to register at bobarcpay.vercel.app first!`);
       saveProcessed(tweet.id);
       continue;
     }
 
-    console.log(`  ✅ Wallet: ${lookup.wallet_address}`);
+    console.log(`  ✅ Sender Wallet: ${senderLookup.wallet_address} | Recipient Wallet: ${lookup.wallet_address}`);
 
     // Send payment
-    const result = await sendPayment(toHandle, payment.amount, tweet.id);
+    const result = await sendPayment(fromHandle, toHandle, payment.amount, tweet.id);
     if (!result) {
       await postReply(tweet.id, `@${tweet.authorHandle} ⚠️ Transfer failed — please try again later.`);
       saveProcessed(tweet.id);

@@ -47,6 +47,7 @@ function getBotWalletId(): string {
 export async function sendUsdc(
   toAddress: string,
   amountUsdc: number,
+  fromWalletId?: string,
 ): Promise<{ txHash: string; walletId: string }> {
   if (!toAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
     throw new Error(`Invalid recipient address: ${toAddress}`);
@@ -56,7 +57,7 @@ export async function sendUsdc(
   }
 
   const client = getCircleClient();
-  const walletId = getBotWalletId();
+  const walletId = fromWalletId || getBotWalletId();
   const idempotencyKey = randomUUID();
 
   const transferResponse = await client.createTransaction({
