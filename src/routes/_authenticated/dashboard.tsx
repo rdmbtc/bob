@@ -147,7 +147,7 @@ function Dashboard() {
 
 
   const mutation = useMutation({
-    mutationFn: (input: { twitter_handle: string; wallet_address: string }) =>
+    mutationFn: (input: { twitter_handle: string; wallet_address?: string }) =>
       saveRegistration({ data: input }),
     onSuccess: () => {
       toast.success("Registration saved! Bob can now send on your behalf.");
@@ -310,7 +310,7 @@ function Dashboard() {
                     id="wallet"
                     value={wallet}
                     onChange={(e) => setWallet(e.target.value.trim())}
-                    placeholder="0x..."
+                    placeholder="Leave blank to auto-generate a wallet"
                     className="font-mono"
                   />
                   {errors.wallet && (

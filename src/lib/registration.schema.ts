@@ -16,7 +16,9 @@ export const registrationSchema = z.object({
   wallet_address: z
     .string()
     .trim()
-    .regex(WALLET_REGEX, "Enter a valid Arc wallet address (0x...)"),
+    .regex(WALLET_REGEX, "Enter a valid Arc wallet address (0x...)")
+    .optional()
+    .or(z.literal("")),
 });
 
 export type RegistrationInput = z.infer<typeof registrationSchema>;
