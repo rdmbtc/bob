@@ -59,10 +59,10 @@ export async function sendUsdc(
   const walletId = getBotWalletId();
   const idempotencyKey = randomUUID();
 
-  // Initiate the transfer
   const transferResponse = await client.createTransaction({
     walletId,
     tokenAddress: ARC_TESTNET_USDC,
+    blockchain: ARC_TESTNET_BLOCKCHAIN,
     destinationAddress: toAddress as `0x${string}`,
     amount: [amountUsdc.toFixed(6)],
     fee: {
@@ -70,7 +70,7 @@ export async function sendUsdc(
       config: { feeLevel: "MEDIUM" },
     },
     idempotencyKey,
-  });
+  } as any);
 
   const transactionId = transferResponse.data?.id;
   if (!transactionId) {
