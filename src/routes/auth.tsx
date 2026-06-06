@@ -56,8 +56,13 @@ function AuthPage() {
 
       const signature = await personalSign(provider, address, message);
 
+      // Hash the signature using SHA-256 to fit within Supabase's 72-character password limit (SHA-256 hex is 64 chars)
+      const msgUint8 = new TextEncoder().encode(signature);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const password = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+
       const email = `${address.toLowerCase()}@arcwallet.bobarcpay.app`;
-      const password = signature;
 
       // Step 1: Try to sign in with password
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
