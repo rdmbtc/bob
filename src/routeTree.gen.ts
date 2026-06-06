@@ -17,8 +17,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as ApiPublicTransactionsRouteImport } from './routes/api/public/transactions'
 import { Route as ApiPublicRegistrationRouteImport } from './routes/api/public/registration'
-import { Route as ApiPublicBotLookupRouteImport } from './routes/api/public/bot/lookup'
 import { Route as ApiPublicBotSendRouteImport } from './routes/api/public/bot/send'
+import { Route as ApiPublicBotLookupRouteImport } from './routes/api/public/bot/lookup'
 
 const HowItWorksRoute = HowItWorksRouteImport.update({
   id: '/how-it-works',
@@ -59,14 +59,14 @@ const ApiPublicRegistrationRoute = ApiPublicRegistrationRouteImport.update({
   path: '/api/public/registration',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicBotLookupRoute = ApiPublicBotLookupRouteImport.update({
-  id: '/api/public/bot/lookup',
-  path: '/api/public/bot/lookup',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiPublicBotSendRoute = ApiPublicBotSendRouteImport.update({
   id: '/api/public/bot/send',
   path: '/api/public/bot/send',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicBotLookupRoute = ApiPublicBotLookupRouteImport.update({
+  id: '/api/public/bot/lookup',
+  path: '/api/public/bot/lookup',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -212,18 +212,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicRegistrationRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/bot/lookup': {
-      id: '/api/public/bot/lookup'
-      path: '/api/public/bot/lookup'
-      fullPath: '/api/public/bot/lookup'
-      preLoaderRoute: typeof ApiPublicBotLookupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/bot/send': {
       id: '/api/public/bot/send'
       path: '/api/public/bot/send'
       fullPath: '/api/public/bot/send'
       preLoaderRoute: typeof ApiPublicBotSendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/bot/lookup': {
+      id: '/api/public/bot/lookup'
+      path: '/api/public/bot/lookup'
+      fullPath: '/api/public/bot/lookup'
+      preLoaderRoute: typeof ApiPublicBotLookupRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -254,3 +254,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
