@@ -31,9 +31,9 @@ export const Route = createFileRoute("/api/public/registration")({
         }
 
         const handle = normalizeHandle(parsed.data.handle);
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { supabase } = await import("@/integrations/supabase/client");
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await supabase
           .from("registrations")
           .select("twitter_handle, wallet_address")
           .eq("twitter_handle", handle)

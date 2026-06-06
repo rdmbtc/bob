@@ -48,10 +48,10 @@ export const Route = createFileRoute("/api/public/bot/send")({
         const { to_handle, amount_usdc, tweet_id } = parsed.data;
         const handle = normalizeHandle(to_handle);
 
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { supabase } = await import("@/integrations/supabase/client");
 
         // Look up recipient wallet
-        const { data: registration, error: regError } = await supabaseAdmin
+        const { data: registration, error: regError } = await supabase
           .from("registrations")
           .select("wallet_address")
           .eq("twitter_handle", handle)
@@ -73,7 +73,7 @@ export const Route = createFileRoute("/api/public/bot/send")({
         }
 
         // Insert pending row first
-        const { data: txRow, error: insertError } = await supabaseAdmin
+        const { data: txRow, error: insertError } = await supabase
           .from("transactions")
           .insert({
             twitter_handle: handle,
@@ -98,7 +98,7 @@ export const Route = createFileRoute("/api/public/bot/send")({
           txHash = result.txHash;
         } catch (err) {
           console.error("[bot/send] Transfer error:", err);
-          await supabaseAdmin
+          await supabase
             .from("transactions")
             .update({ status: "failed" })
             .eq("id", txRow.id);
@@ -110,7 +110,7 @@ export const Route = createFileRoute("/api/public/bot/send")({
         }
 
         // Mark as confirmed with tx hash
-        await supabaseAdmin
+        await supabase
           .from("transactions")
           .update({ tx_hash: txHash, status: "confirmed" })
           .eq("id", txRow.id);

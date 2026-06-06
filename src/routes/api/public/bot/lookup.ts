@@ -33,9 +33,9 @@ export const Route = createFileRoute("/api/public/bot/lookup")({
         }
 
         const handle = normalizeHandle(parsed.data.handle);
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { supabase } = await import("@/integrations/supabase/client");
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await supabase
           .from("registrations")
           .select("wallet_address")
           .eq("twitter_handle", handle)
