@@ -50,10 +50,10 @@ export const Route = createFileRoute("/api/public/bot/send")({
         const sender = normalizeHandle(from_handle);
         const recipient = normalizeHandle(to_handle);
 
-        const { supabase } = await import("@/integrations/supabase/client");
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         // 1. Look up sender wallet
-        const { data: senderReg, error: senderError } = await supabase
+        const { data: senderReg, error: senderError } = await supabaseAdmin
           .from("registrations")
           .select("wallet_address")
           .eq("twitter_handle", sender)
@@ -75,7 +75,7 @@ export const Route = createFileRoute("/api/public/bot/send")({
         }
 
         // 2. Look up recipient wallet
-        const { data: recipientReg, error: recipientError } = await supabase
+        const { data: recipientReg, error: recipientError } = await supabaseAdmin
           .from("registrations")
           .select("wallet_address")
           .eq("twitter_handle", recipient)
@@ -124,7 +124,7 @@ export const Route = createFileRoute("/api/public/bot/send")({
         }
 
         // Insert pending row first
-        const { data: txRow, error: insertError } = await supabase
+        const { data: txRow, error: insertError } = await supabaseAdmin
           .from("transactions")
           .insert({
             twitter_handle: recipient,
@@ -149,7 +149,7 @@ export const Route = createFileRoute("/api/public/bot/send")({
           txHash = result.txHash;
         } catch (err) {
           console.error("[bot/send] Transfer error:", err);
-          await supabase
+          await supabaseAdmin
             .from("transactions")
             .update({ status: "failed" })
             .eq("id", txRow.id);
@@ -161,13 +161,13 @@ export const Route = createFileRoute("/api/public/bot/send")({
         }
 
         // Mark as confirmed with tx hash
-        await supabase
+        await supabaseAdmin
           .from("transactions")
           .update({ tx_hash: txHash, status: "confirmed" })
           .eq("id", txRow.id);
 
         const explorerUrl = explorerTxUrl(txHash);
-        console.log(`[bot/send] ✅ Sent ${amount_usdc} USDC to @${handle} — ${explorerUrl}`);
+        console.log(`[bot/send] ✅ Sent ${amount_usdc} USDC to @${recipient} — ${explorerUrl}`);
 
         return new Response(
           JSON.stringify({ tx_hash: txHash, explorer_url: explorerUrl }),
