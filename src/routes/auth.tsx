@@ -1,0 +1,144 @@
+import { useState } from "react";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
+import { Wallet } from "lucide-react";
+
+import bobAvatar from "@/assets/bob-avatar.png";
+import { Clouds } from "@/components/Clouds";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable/index";
+import {
+  getDefaultProvider,
+  requestAccount,
+  ensureArcTestnet,
+  personalSign,
+} from "@/lib/wallet";
+import {
+  requestWalletNonce,
+  verifyWalletSignature,
+} from "@/lib/wallet-auth.functions";
+
+export const Route = createFileRoute("/auth")({
+  head: () => ({
+    meta: [
+      { title: "Sign in — BobArcPay" },
+      { name: "description", content: "Connect your wallet to sign in to BobArcPay." },
+    ],
+  }),
+  component: AuthPage,
+});
+
+function AuthPage() {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState<"wallet" | "google" | null>(null);
+
+  const getNonce = useServerFn(requestWalletNonce);
+  const verifySignature = useServerFn(verifyWalletSignature);
+
+  async function handleWallet() {
+    setLoading("wallet");
+    try {
+      const provider = getDefaultProvider();
+      if (!provider) {
+        toast.error("No wallet detected. Install a browser wallet like MetaMask.");
+        return;
+      }
+
+      const address = await requestAccount(provider);
+      await ensureArcTestnet(provider);
+
+      const { message } = await getNonce({ data: { address } });
+      const signature = await personalSign(provider, address, message);
+
+      const { tokenHash } = await verifySignature({
+        data: { address, signature },
+      });
+
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: "email",
+      });
+      if (error) {
+        toast.error("Could not complete sign-in. Please try again.");
+        return;
+      }
+
+      toast.success("Wallet connected — you're signed in!");
+      navigate({ to: "/dashboard" });
+    } catch (err) {
+      const code = (err as { code?: number })?.code;
+      if (code === 4001) {
+        toast.error("Request rejected in your wallet.");
+      } else {
+        toast.error("Wallet sign-in failed. Please try again.");
+      }
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function handleGoogle() {
+    setLoading("google");
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: window.location.origin + "/dashboard",
+    });
+    if (result.error) {
+      setLoading(null);
+      toast.error("Google sign-in failed. Please try again.");
+      return;
+    }
+    if (result.redirected) return;
+    navigate({ to: "/dashboard" });
+  }
+
+  return (
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-hero px-4 py-12">
+      <Clouds />
+      <Link to="/" className="relative z-10 mb-6 flex items-center gap-2">
+        <img
+          src={bobAvatar}
+          alt="BobArcPay"
+          width={48}
+          height={48}
+          className="h-12 w-12 animate-bob rounded-full border-[3px] border-foreground bg-secondary"
+        />
+        <span className="font-display text-2xl tracking-wide text-foreground drop-shadow-[2px_2px_0_white]">
+          BobArcPay
+        </span>
+      </Link>
+
+      <div className="relative z-10 w-full max-w-sm rounded-3xl border-[3px] border-foreground bg-card p-6 shadow-bob-lg">
+        <h1 className="text-center font-display text-2xl tracking-wide">Sign in to BobArcPay</h1>
+        <p className="mt-1 text-center text-sm font-medium text-muted-foreground">
+          Connect your Arc wallet to get started.
+        </p>
+
+        <Button className="mt-6 w-full" onClick={handleWallet} disabled={loading !== null}>
+          <Wallet className="mr-2 h-4 w-4" />
+          {loading === "wallet" ? "Connecting…" : "Connect Wallet"}
+        </Button>
+
+        <div className="my-4 flex items-center gap-3 text-xs font-bold text-muted-foreground">
+          <span className="h-0.5 flex-1 bg-foreground/30" />
+          OR
+          <span className="h-0.5 flex-1 bg-foreground/30" />
+        </div>
+
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={handleGoogle}
+          disabled={loading !== null}
+        >
+          {loading === "google" ? "Please wait…" : "Continue with Google"}
+        </Button>
+
+        <p className="mt-4 text-center text-xs font-medium text-muted-foreground">
+          Signing the message is free and proves you own the wallet. It never moves funds.
+        </p>
+      </div>
+    </div>
+  );
+}
