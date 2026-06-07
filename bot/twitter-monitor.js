@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * BobArcPay Twitter Bot v8 — Instant Reply + Random Templates
+ * BobArcPay Twitter Bot v8.1 — Instant Reply + TX Link Follow-up
  */
 
 import { execSync } from "node:child_process";
@@ -13,7 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROCESSED_FILE = join(__dirname, "processed_tweets.json");
 
 const API_URL    = process.env.BOBARCPAY_API_URL || "https://bobarcpay.vercel.app";
-const SECRET     = process.env.BOB_AGENT_SECRET || "";
+const SECRET=process.env.BOB_AGENT_SECRET || "";
 const BOT_HANDLE = (process.env.TWITTER_USERNAME || "bobarcpay").toLowerCase();
 const POLL_SEC   = parseInt(process.env.POLL_INTERVAL || "45", 10);
 const TWITTER_CLI = process.env.TWITTER_CLI || "/root/.local/bin/twitter";
@@ -21,10 +21,10 @@ const MAX_AMOUNT = 10;
 
 const WORKER_URL = "https://misty-meadow-70bf.ntraid03.workers.dev";
 const BEARER     = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
-const AUTH_TOKEN = process.env.BOBARCPAY_AUTH_TOKEN || process.env.TWITTER_AUTH_TOKEN || "";
-const CT0        = process.env.BOBARCPAY_CT0 || process.env.TWITTER_CT0 || "";
+const AUTH_TOKEN=process.env.BOBARCPAY_AUTH_TOKEN || process.env.TWITTER_AUTH_TOKEN || "";
+const CT0=process.env.BOBARCPAY_CT0 || process.env.TWITTER_CT0 || "";
 
-// ── 30+ Unique Reply Templates ──────────────────────────────────────────────
+// ── Reply Templates ─────────────────────────────────────────────────────────
 
 const T = [
   (f,t,a) => `@${f} sent ${a} USDC to @${t} ✨`,
@@ -57,6 +57,17 @@ const T = [
   (f,t,a) => `@${t} received ${a} USDC from @${f} ✌️`,
   (f,t,a) => `@${f} -> @${t}: ${a} USDC sent your way 🫡`,
   (f,t,a) => `@${t} +${a} USDC from @${f} - enjoy! 🎊`,
+];
+
+// TX link templates
+const TX_T = [
+  (tx) => `tx: ${tx}`,
+  (tx) => `🔗 ${tx}`,
+  (tx) => `explorer: ${tx}`,
+  (tx) => `check it: ${tx}`,
+  (tx) => `${tx}`,
+  (tx) => `view tx: ${tx}`,
+  (tx) => `⛓️ ${tx}`,
 ];
 
 const ERR = {
@@ -279,19 +290,26 @@ async function checkMentions() {
 
     console.log(`  Wallets OK`);
 
-    // REPLY FIRST (instant + unique!), payment in background
+    // STEP 1: Reply instantly (unique template)
     saveProcessed(tweet.id);
     await postReply(tweet.id, pick(T)(fromHandle, toHandle, payment.amount));
 
-    sendPayment(fromHandle, toHandle, payment.amount, tweet.id).then(r => {
-      if (r?.tx_hash) console.log(`  TX: ${r.tx_hash}`);
-      else console.log(`  Payment failed`);
+    // STEP 2: Payment in background -> then reply with TX link
+    sendPayment(fromHandle, toHandle, payment.amount, tweet.id).then(async (r) => {
+      if (r?.explorer_url) {
+        console.log(`  TX: ${r.tx_hash}`);
+        // Post follow-up reply with TX link (reply to the ORIGINAL tweet)
+        await postReply(tweet.id, pick(TX_T)(r.explorer_url));
+      } else {
+        console.log(`  Payment failed`);
+        await postReply(tweet.id, pick(ERR.failed)(fromHandle));
+      }
     }).catch(e => console.error(`  Payment error:`, e.message));
   }
 }
 
 async function main() {
-  console.log("BobArcPay Bot v8 - Instant Unique Replies");
+  console.log("BobArcPay Bot v8.1 - Instant Reply + TX Follow-up");
   console.log(`  API: ${API_URL} | Handle: @${BOT_HANDLE} | Poll: ${POLL_SEC}s`);
   if (!SECRET) { console.error("BOB_AGENT_SECRET not set!"); process.exit(1); }
 
