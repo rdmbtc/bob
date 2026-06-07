@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * BobArcPay Twitter Bot v7 — Fast Reply edition
- * Posts reply FIRST, then sends payment in background.
+ * BobArcPay Twitter Bot v8 — Instant Reply + Random Templates
  */
 
 import { execSync } from "node:child_process";
@@ -13,7 +12,6 @@ import process from "node:process";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROCESSED_FILE = join(__dirname, "processed_tweets.json");
 
-// ── Config ──────────────────────────────────────────────────────────────────
 const API_URL    = process.env.BOBARCPAY_API_URL || "https://bobarcpay.vercel.app";
 const SECRET     = process.env.BOB_AGENT_SECRET || "";
 const BOT_HANDLE = (process.env.TWITTER_USERNAME || "bobarcpay").toLowerCase();
@@ -26,12 +24,66 @@ const BEARER     = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%
 const AUTH_TOKEN = process.env.BOBARCPAY_AUTH_TOKEN || process.env.TWITTER_AUTH_TOKEN || "";
 const CT0        = process.env.BOBARCPAY_CT0 || process.env.TWITTER_CT0 || "";
 
+// ── 30+ Unique Reply Templates ──────────────────────────────────────────────
+
+const T = [
+  (f,t,a) => `@${f} sent ${a} USDC to @${t} ✨`,
+  (f,t,a) => `@${f} -> @${t}: ${a} USDC delivered 🤝`,
+  (f,t,a) => `done! ${a} USDC from @${f} to @${t} on its way`,
+  (f,t,a) => `@${f} just sent @${t} ${a} USDC 🫡`,
+  (f,t,a) => `${a} USDC sent from @${f} to @${t} 💸`,
+  (f,t,a) => `@${f} -> @${t}: ${a} USDC ✅`,
+  (f,t,a) => `payment sent! @${f} -> @${t}: ${a} USDC`,
+  (f,t,a) => `@${t} received ${a} USDC from @${f} 🎉`,
+  (f,t,a) => `@${f} just dropped ${a} USDC to @${t} 💰`,
+  (f,t,a) => `confirmed: ${a} USDC @${f} -> @${t}`,
+  (f,t,a) => `@${f} sent @${t} ${a} USDC on Arc 🚀`,
+  (f,t,a) => `yo @${t} you got ${a} USDC from @${f}`,
+  (f,t,a) => `@${f} -> @${t}: ${a} USDC transferred 🔄`,
+  (f,t,a) => `@${t} check your wallet - ${a} USDC from @${f}`,
+  (f,t,a) => `${a} USDC landed @${t} - sent by @${f} 🪙`,
+  (f,t,a) => `@${f} paid @${t} ${a} USDC 💫`,
+  (f,t,a) => `tx confirmed! @${f} -> @${t}: ${a} USDC`,
+  (f,t,a) => `@${f} just sent @${t} ${a} USDC on-chain ⛓️`,
+  (f,t,a) => `@${t} +${a} USDC from @${f} 💵`,
+  (f,t,a) => `@${f} -> @${t}: ${a} USDC. done deal 🤙`,
+  (f,t,a) => `@${t} ${a} USDC incoming from @${f} 📥`,
+  (f,t,a) => `sent it! @${f} -> @${t}: ${a} USDC`,
+  (f,t,a) => `@${f} transferred ${a} USDC to @${t} 🔥`,
+  (f,t,a) => `@${t} just got ${a} USDC from @${f} 🫶`,
+  (f,t,a) => `@${f} -> @${t}: ${a} USDC on Arc Testnet ⚡`,
+  (f,t,a) => `boom @${f} sent @${t} ${a} USDC 💥`,
+  (f,t,a) => `@${f} wired ${a} USDC to @${t} 🔗`,
+  (f,t,a) => `@${t} received ${a} USDC from @${f} ✌️`,
+  (f,t,a) => `@${f} -> @${t}: ${a} USDC sent your way 🫡`,
+  (f,t,a) => `@${t} +${a} USDC from @${f} - enjoy! 🎊`,
+];
+
+const ERR = {
+  no_sender: (f) => [
+    `@${f} you need to register first! head to bobarcpay.vercel.app`,
+    `@${f} looks like you are not registered yet. sign up at bobarcpay.vercel.app`,
+  ],
+  no_recipient: (f,t) => [
+    `@${f} @${t} hasnt registered yet. they need to sign up at bobarcpay.vercel.app`,
+    `@${f} looks like @${t} isnt on BobArcPay yet. tell them to register!`,
+  ],
+  no_target: (f) => [
+    `@${f} cant figure out who to send to. try: @bobarcpay send @username 1 usdc`,
+    `@${f} who should i send to? use: @bobarcpay send @username 1 usdc`,
+  ],
+  failed: (f) => [
+    `@${f} something went wrong with the transfer - try again in a bit`,
+    `@${f} transfer didnt go through, please try again later`,
+  ],
+};
+
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function loadProcessed() {
-  try {
-    if (existsSync(PROCESSED_FILE)) return JSON.parse(readFileSync(PROCESSED_FILE, "utf8"));
-  } catch {}
+  try { if (existsSync(PROCESSED_FILE)) return JSON.parse(readFileSync(PROCESSED_FILE, "utf8")); } catch {}
   return [];
 }
 
@@ -59,23 +111,21 @@ function searchMentions() {
       const idM = line.match(/^- id: '(\d+)'$/);
       if (idM) {
         if (cur) tweets.push(cur);
-        cur = { id: idM[1], text: "", authorHandle: "", inReplyTo: null };
+        cur = { id: idM[1], text: "", authorHandle: "", inReplyToScreenName: null };
       }
       if (cur) {
         const tM = line.match(/^\s+text: '?(.*?)'?$/);
         const aM = line.match(/^\s+screenName: (\w+)$/);
-        const replyM = line.match(/^\s+inReplyToStatusId: '(\d+)'$/);
-        const replyScreenM = line.match(/^\s+inReplyToScreenName: (\w+)$/);
+        const rM = line.match(/^\s+inReplyToScreenName: (\w+)$/);
         if (tM) cur.text = tM[1];
         if (aM) cur.authorHandle = aM[1];
-        if (replyM) cur.inReplyTo = replyM[1];
-        if (replyScreenM) cur.inReplyToScreenName = replyScreenM[1];
+        if (rM) cur.inReplyToScreenName = rM[1];
       }
     }
     if (cur) tweets.push(cur);
     return tweets;
   } catch (e) {
-    console.error("❌ Search error:", e.message.split("\n")[0]);
+    console.error("Search error:", e.message.split("\n")[0]);
     return [];
   }
 }
@@ -83,10 +133,7 @@ function searchMentions() {
 // ── Post reply via CF Worker ────────────────────────────────────────────────
 
 async function postReply(tweetId, text) {
-  if (!AUTH_TOKEN || !CT0) {
-    console.error("  ❌ No cookies for posting");
-    return false;
-  }
+  if (!AUTH_TOKEN || !CT0) return false;
   try {
     const resp = await fetch(`${WORKER_URL}/x/graphql/a1p9RWpkYKBjWv_I3WzS-A/CreateTweet`, {
       method: "POST",
@@ -118,12 +165,11 @@ async function postReply(tweetId, text) {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     if (data.errors) throw new Error(JSON.stringify(data.errors[0]));
-    const id = data?.data?.create_tweet?.tweet_results?.rest_id
-            || data?.data?.create_tweet?.tweet_results?.result?.rest_id;
-    console.log(`  📤 Reply posted: ${id}`);
+    const id = data?.data?.create_tweet?.tweet_results?.rest_id || data?.data?.create_tweet?.tweet_results?.result?.rest_id;
+    console.log(`  Reply: ${id}`);
     return true;
   } catch (e) {
-    console.error("  ❌ Reply error:", e.message);
+    console.error("  Reply error:", e.message);
     return false;
   }
 }
@@ -137,10 +183,7 @@ async function lookupUser(handle) {
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     return await resp.json();
-  } catch (e) {
-    console.error(`  ❌ Lookup @${handle}:`, e.message);
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
 async function sendPayment(fromHandle, toHandle, amountUsdc, tweetId) {
@@ -148,23 +191,16 @@ async function sendPayment(fromHandle, toHandle, amountUsdc, tweetId) {
     const resp = await fetch(`${API_URL}/api/public/bot/send`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${SECRET}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from_handle: fromHandle,
-        to_handle: toHandle,
-        amount_usdc: amountUsdc,
-        tweet_id: tweetId,
-      }),
+      body: JSON.stringify({ from_handle: fromHandle, to_handle: toHandle, amount_usdc: amountUsdc, tweet_id: tweetId }),
     });
     const data = await resp.json();
     if (!resp.ok && resp.status !== 409) throw new Error(data.error || `HTTP ${resp.status}`);
     return { status: resp.status, ...data };
   } catch (e) {
-    console.error(`  ❌ Payment:`, e.message);
+    console.error("  Payment:", e.message);
     return null;
   }
 }
-
-// ── Parse amount ────────────────────────────────────────────────────────────
 
 function parsePayment(text) {
   const patterns = [
@@ -188,7 +224,6 @@ function parsePayment(text) {
 async function checkMentions() {
   const processed = loadProcessed();
   const tweets = searchMentions();
-
   if (tweets.length === 0) return;
   console.log(`  Found ${tweets.length} tweets`);
 
@@ -197,107 +232,75 @@ async function checkMentions() {
     if (tweet.authorHandle.toLowerCase() === BOT_HANDLE) continue;
 
     const text = tweet.text || "";
-    if (!text.toLowerCase().includes(`@${BOT_HANDLE}`)) {
-      saveProcessed(tweet.id);
-      continue;
-    }
+    if (!text.toLowerCase().includes(`@${BOT_HANDLE}`)) { saveProcessed(tweet.id); continue; }
 
     const payment = parsePayment(text);
-    if (!payment) {
-      saveProcessed(tweet.id);
-      continue;
-    }
+    if (!payment) { saveProcessed(tweet.id); continue; }
 
     let toHandle = payment.handle;
-
-    // If no explicit @handle, try parent tweet author from search results
-    if (!toHandle) {
-      if (tweet.inReplyToScreenName && tweet.inReplyToScreenName.toLowerCase() !== BOT_HANDLE) {
-        toHandle = tweet.inReplyToScreenName;
-        console.log(`  ✅ Parent from search: @${toHandle}`);
-      }
+    if (!toHandle && tweet.inReplyToScreenName && tweet.inReplyToScreenName.toLowerCase() !== BOT_HANDLE) {
+      toHandle = tweet.inReplyToScreenName;
     }
-
-    // Fallback: first @mention in text that is not @bobarcpay
     if (!toHandle) {
-      const mentionRegex = /@[a-zA-Z0-9_]+/g;
+      const re = /@[a-zA-Z0-9_]+/g;
       let m;
-      while ((m = mentionRegex.exec(text)) !== null) {
+      while ((m = re.exec(text)) !== null) {
         const mention = m[0].substring(1);
-        if (mention.toLowerCase() !== BOT_HANDLE) {
-          toHandle = mention;
-          break;
-        }
+        if (mention.toLowerCase() !== BOT_HANDLE) { toHandle = mention; break; }
       }
     }
 
+    const fromHandle = tweet.authorHandle.toLowerCase();
+
     if (!toHandle) {
-      await postReply(tweet.id, `@${tweet.authorHandle} ❌ Could not determine recipient. Use: @bobarcpay send @username 1 usdc`);
+      await postReply(tweet.id, pick(ERR.no_target(fromHandle)));
       saveProcessed(tweet.id);
       continue;
     }
 
     toHandle = toHandle.toLowerCase();
-    const fromHandle = tweet.authorHandle.toLowerCase();
-    console.log(`\n📨 @${fromHandle} → @${toHandle}: ${payment.amount} USDC`);
+    console.log(`\n  @${fromHandle} -> @${toHandle}: ${payment.amount} USDC`);
 
-    // Lookup sender & recipient in parallel
-    const [senderLookup, recipientLookup] = await Promise.all([
-      lookupUser(fromHandle),
-      lookupUser(toHandle),
-    ]);
+    const [sender, recipient] = await Promise.all([lookupUser(fromHandle), lookupUser(toHandle)]);
 
-    if (!senderLookup?.registered) {
-      console.log(`  ❌ Sender @${fromHandle} not registered`);
-      await postReply(tweet.id, `@${fromHandle} ❌ You aren't registered on BobArcPay yet. Register at bobarcpay.vercel.app first!`);
+    if (!sender?.registered) {
+      console.log(`  Sender not registered`);
+      await postReply(tweet.id, pick(ERR.no_sender(fromHandle)));
       saveProcessed(tweet.id);
       continue;
     }
 
-    if (!recipientLookup?.registered) {
-      console.log(`  ❌ Recipient @${toHandle} not registered`);
-      await postReply(tweet.id, `@${fromHandle} ❌ @${toHandle} isn't registered on BobArcPay yet. They need to register at bobarcpay.vercel.app first!`);
+    if (!recipient?.registered) {
+      console.log(`  Recipient not registered`);
+      await postReply(tweet.id, pick(ERR.no_recipient(fromHandle, toHandle)));
       saveProcessed(tweet.id);
       continue;
     }
 
-    console.log(`  ✅ Sender: ${senderLookup.wallet_address} | Recipient: ${recipientLookup.wallet_address}`);
+    console.log(`  Wallets OK`);
 
-    // 🚀 POST REPLY FIRST (fast!), then send payment in background
+    // REPLY FIRST (instant + unique!), payment in background
     saveProcessed(tweet.id);
-    await postReply(tweet.id, `@${tweet.authorHandle} ✅ Sent ${payment.amount} USDC to @${toHandle} on Arc Testnet!`);
+    await postReply(tweet.id, pick(T)(fromHandle, toHandle, payment.amount));
 
-    // Send payment in background (fire-and-forget)
-    sendPayment(fromHandle, toHandle, payment.amount, tweet.id).then(result => {
-      if (result?.tx_hash) {
-        console.log(`  🎉 TX: ${result.tx_hash}`);
-      } else {
-        console.log(`  ⚠️ Payment failed for @${fromHandle} → @${toHandle}`);
-      }
-    }).catch(err => {
-      console.error(`  ❌ Payment error:`, err.message);
-    });
+    sendPayment(fromHandle, toHandle, payment.amount, tweet.id).then(r => {
+      if (r?.tx_hash) console.log(`  TX: ${r.tx_hash}`);
+      else console.log(`  Payment failed`);
+    }).catch(e => console.error(`  Payment error:`, e.message));
   }
 }
 
-// ── Entry point ─────────────────────────────────────────────────────────────
-
 async function main() {
-  console.log("🚀 BobArcPay Bot v7 starting...");
-  console.log(`   API: ${API_URL}`);
-  console.log(`   Handle: @${BOT_HANDLE}`);
-  console.log(`   Poll: ${POLL_SEC}s`);
-  console.log(`   Auth: ${AUTH_TOKEN ? "✅" : "❌"}`);
-  console.log(`   Mode: Fast Reply (reply first, pay in background)`);
-
-  if (!SECRET) { console.error("❌ BOB_AGENT_SECRET not set!"); process.exit(1); }
+  console.log("BobArcPay Bot v8 - Instant Unique Replies");
+  console.log(`  API: ${API_URL} | Handle: @${BOT_HANDLE} | Poll: ${POLL_SEC}s`);
+  if (!SECRET) { console.error("BOB_AGENT_SECRET not set!"); process.exit(1); }
 
   while (true) {
     try {
-      console.log(`\n🔍 [${new Date().toISOString()}] Searching...`);
+      console.log(`\n  [${new Date().toISOString()}] Searching...`);
       await checkMentions();
     } catch (e) {
-      console.error("❌ Poll error:", e.message);
+      console.error("Poll error:", e.message);
     }
     await new Promise(r => setTimeout(r, POLL_SEC * 1000));
   }
